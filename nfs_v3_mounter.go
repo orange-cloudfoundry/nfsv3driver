@@ -11,6 +11,7 @@ import (
 	"code.cloudfoundry.org/voldriver"
 	"code.cloudfoundry.org/voldriver/driverhttp"
 	"code.cloudfoundry.org/voldriver/invoker"
+	"strings"
 )
 
 type nfsV3Mounter struct {
@@ -26,8 +27,42 @@ func (m *nfsV3Mounter) Mount(env voldriver.Env, source string, target string, op
 	logger.Info("start")
 	defer logger.Info("end")
 
-	logger.Debug("exec-mount", lager.Data{"source": source, "target": target})
-	_, err := m.invoker.Invoke(env, "fuse-nfs", []string{"-a", "-n", source, "-m", target})
+	logger.Debug("parse-mount", lager.Data{"source": source, "target": target})
+
+	mountParams := []string{
+		"-a",
+	}
+
+	params := strings.Split(source, '?')
+	var source []string
+
+	for _, p := range strings.Split(params[1], '&') {
+
+		if strings.Contains(p, "uid=") && !strings.Contains(p, "nfs_uid=") {
+			source = append(source, p)
+			continue
+		}
+
+		if strings.Contains(p, "gid=") && !strings.Contains(p, "nfs_gid=") {
+			source = append(source, p)
+			continue
+		}
+
+		mountParams = append(mountParams, "--" + p)
+	}
+
+	share := fmt.Sprintf("%s?%s", params[0], strings.Join(source, "&"))
+
+	logger.Debug("exec-mount", lager.Data{"source": share, "target": target, "options": strings.Join(mountParams, ",")})
+
+	mountParams = append(mountParams, "-n")
+	mountParams = append(mountParams, share)
+
+	mountParams = append(mountParams, "-m")
+	mountParams = append(mountParams, target)
+
+	_, err := m.invoker.Invoke(env, "fuse-nfs", mountParams)
+
 	return err
 }
 
