@@ -30,37 +30,25 @@ func (m *nfsV3Mounter) Mount(env voldriver.Env, source string, target string, op
 	logger.Debug("parse-mount", lager.Data{"source": source, "target": target})
 
 	mountParams := []string{
-		"-a",
+		"-n", source,
+		"-m", target,
 	}
 
-	params := strings.Split(source, '?')
-	var source []string
+	for k, v := range opts {
+		val, err := v.(bool)
 
-	for _, p := range strings.Split(params[1], '&') {
-
-		if strings.Contains(p, "uid=") && !strings.Contains(p, "nfs_uid=") {
-			source = append(source, p)
-			continue
+		if err == nil && val != false {
+			mountParams = append(mountParams, fmt.Sprintf("--%s", k))
+		} else if err != nil {
+			mountParams = append(mountParams, fmt.Sprintf("--%s=%s", k, v.(string)))
 		}
-
-		if strings.Contains(p, "gid=") && !strings.Contains(p, "nfs_gid=") {
-			source = append(source, p)
-			continue
-		}
-
-		mountParams = append(mountParams, "--" + p)
 	}
 
-	share := fmt.Sprintf("%s?%s", params[0], strings.Join(source, "&"))
+	if len(mountParams) == 2 {
+		mountParams = append(mountParams, "-a");
+	}
 
-	logger.Debug("exec-mount", lager.Data{"source": share, "target": target, "options": strings.Join(mountParams, ",")})
-
-	mountParams = append(mountParams, "-n")
-	mountParams = append(mountParams, share)
-
-	mountParams = append(mountParams, "-m")
-	mountParams = append(mountParams, target)
-
+	logger.Debug("exec-mount", lager.Data{"params": strings.Join(mountParams, ",")})
 	_, err := m.invoker.Invoke(env, "fuse-nfs", mountParams)
 
 	return err
