@@ -12,6 +12,7 @@ import (
 	"code.cloudfoundry.org/voldriver/driverhttp"
 	"code.cloudfoundry.org/voldriver/invoker"
 	"strings"
+	"reflect"
 )
 
 type nfsV3Mounter struct {
@@ -34,7 +35,52 @@ func (m *nfsV3Mounter) Mount(env voldriver.Env, source string, target string, op
 		"-m", target,
 	}
 
+	whitelist := []string{
+		// Fuse_NFS Options
+		"fusenfs_allow_other_own_ids",
+		"fusenfs_uid",
+		"fusenfs_gid",
+
+		// libNFS options
+		// options for libnfs need to be
+		// pass direction url form for share
+
+		// Fuse Option (see man mount.fuse)
+		"default_permissions",
+		"multithread",
+		"allow_other",
+		"allow_root",
+		"umask",
+		"direct_io",
+		"kernel_cache",
+		"auto_cache",
+		"entry_timeout",
+		"negative_timeout",
+		"attr_timeout",
+		"ac_attr_timeout",
+		"large_read",
+		"hard_remove",
+		"fsname",
+		"subtype",
+		"blkdev",
+		"intr",
+		"mount_max",
+		"max_read",
+		"max_readahead",
+		"async_read",
+		"sync_read",
+		"nonempty",
+		"intr_signal",
+		"use_ino",
+		"readdir_ino",
+		"debug",
+	}
+
 	for k, v := range opts {
+
+		if !in_array(k, whitelist) {
+			continue
+		}
 
 		logger.Debug("Parse one Options ", lager.Data{"Key": k, "value": v})
 
@@ -76,4 +122,22 @@ func (m *nfsV3Mounter) Check(env voldriver.Env, name, mountPoint string) bool {
 		return false
 	}
 	return true
+}
+
+func in_array(val interface{}, array interface{}) (exists bool) {
+	exists = false
+
+	switch reflect.TypeOf(array).Kind() {
+	case reflect.Slice:
+		s := reflect.ValueOf(array)
+
+		for i := 0; i < s.Len(); i++ {
+			if reflect.DeepEqual(val, s.Index(i).Interface()) == true {
+				exists = true
+				return
+			}
+		}
+	}
+
+	return
 }

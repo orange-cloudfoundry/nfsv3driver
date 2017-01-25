@@ -150,6 +150,7 @@ var _ = Describe("NfsV3Mounter", func() {
 				opts["multithread"] 		= false
 				opts["fusenfs_uid"] 		= 1004
 				opts["fusenfs_gid"] 		= "1004"
+				opts["no_exists_opts"] 		= "example"
 
 				err = subject.Mount(env, "source", "target", opts)
 			})
