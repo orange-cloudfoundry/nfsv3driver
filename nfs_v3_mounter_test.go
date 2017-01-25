@@ -55,11 +55,11 @@ var _ = Describe("NfsV3Mounter", func() {
 			It("should use the passed in variables", func() {
 				_, cmd, args := fakeInvoker.InvokeArgsForCall(0)
 				Expect(cmd).To(Equal("fuse-nfs"))
-				Expect(args[0]).To(Equal("-a"))
-				Expect(args[1]).To(Equal("-n"))
-				Expect(args[2]).To(Equal("source"))
-				Expect(args[3]).To(Equal("-m"))
-				Expect(args[4]).To(Equal("target"))
+				Expect(args[0]).To(Equal("-n"))
+				Expect(args[1]).To(Equal("source"))
+				Expect(args[2]).To(Equal("-m"))
+				Expect(args[3]).To(Equal("target"))
+				Expect(args[4]).To(Equal("-a"))
 			})
 		})
 
@@ -140,4 +140,52 @@ var _ = Describe("NfsV3Mounter", func() {
 			})
 		})
 	})
+
+	Context("#Mount_opts", func() {
+		Context("when mount succeeds", func() {
+			BeforeEach(func() {
+				fakeInvoker.InvokeReturns(nil, nil)
+
+				opts["default_permissions"] 	= true
+				opts["multithread"] 		= false
+				opts["fusenfs_uid"] 		= 1004
+				opts["fusenfs_gid"] 		= "1004"
+
+				err = subject.Mount(env, "source", "target", opts)
+			})
+
+			It("should return without error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should use the passed in variables", func() {
+				_, cmd, args := fakeInvoker.InvokeArgsForCall(0)
+				Expect(cmd).To(Equal("fuse-nfs"))
+				Expect(args[0]).To(Equal("-n"))
+				Expect(args[1]).To(Equal("source"))
+				Expect(args[2]).To(Equal("-m"))
+				Expect(args[3]).To(Equal("target"))
+				Expect(args[4]).To(Equal("--default_permissions"))
+				Expect(args[5]).To(Equal("--fusenfs_uid=1004"))
+				Expect(args[6]).To(Equal("--fusenfs_gid=1004"))
+			})
+		})
+
+		Context("when mount errors", func() {
+			BeforeEach(func() {
+				fakeInvoker.InvokeReturns([]byte("error"), fmt.Errorf("error"))
+
+				err = subject.Mount(env, "source", "target", opts)
+			})
+
+			It("should return without error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+		})
+
+		Context("when mount is cancelled", func() {
+			// TODO: when we pick up the lager.Context
+		})
+	})
+
 })

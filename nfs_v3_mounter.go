@@ -27,7 +27,7 @@ func (m *nfsV3Mounter) Mount(env voldriver.Env, source string, target string, op
 	logger.Info("start")
 	defer logger.Info("end")
 
-	logger.Debug("parse-mount", lager.Data{"source": source, "target": target})
+	logger.Debug("parse-mount", lager.Data{"source": source, "target": target, "options": opts})
 
 	mountParams := []string{
 		"-n", source,
@@ -35,16 +35,21 @@ func (m *nfsV3Mounter) Mount(env voldriver.Env, source string, target string, op
 	}
 
 	for k, v := range opts {
+
+		logger.Debug("Parse one Options ", lager.Data{"Key": k, "value": v})
+
 		val, err := v.(bool)
 
-		if err == nil && val != false {
-			mountParams = append(mountParams, fmt.Sprintf("--%s", k))
-		} else if err != nil {
-			mountParams = append(mountParams, fmt.Sprintf("--%s=%s", k, v.(string)))
+		if err {
+			if val {
+				mountParams = append(mountParams, fmt.Sprintf("--%s", k))
+			}
+		} else {
+			mountParams = append(mountParams, fmt.Sprintf("--%s=%v", k, v))
 		}
 	}
 
-	if len(mountParams) == 2 {
+	if len(mountParams) == 4 {
 		mountParams = append(mountParams, "-a");
 	}
 
