@@ -11,8 +11,11 @@ import (
 	"code.cloudfoundry.org/voldriver"
 	"code.cloudfoundry.org/voldriver/driverhttp"
 	"code.cloudfoundry.org/voldriver/invoker"
+
 	"strings"
-	"reflect"
+	"path/filepath"
+	"io/ioutil"
+	"gopkg.in/yaml.v2"
 )
 
 type nfsV3Mounter struct {
@@ -35,7 +38,120 @@ func (m *nfsV3Mounter) Mount(env voldriver.Env, source string, target string, op
 		"-m", target,
 	}
 
-	whitelist := []string{
+	myCnf, ok := readConfigNFS(logger);
+
+	if ok != nil {
+		myCnf = getDefaultConf();
+	}
+
+	var errorParams []string
+	sloppyMount := false
+
+	for k, v := range opts {
+
+		val, err := v.(bool)
+
+		if k == "sloppy_mount" || k == "-s" {
+			sloppyMount = val && err
+			continue
+		}
+
+		if !stringInSlice(k, myCnf) {
+			errorParams = append(errorParams, k)
+			continue
+		}
+
+		logger.Debug("Whitelisted options", lager.Data{"Options": k})
+
+		if err {
+			if val {
+				mountParams = append(mountParams, fmt.Sprintf("--%s", k))
+			}
+
+		} else {
+			mountParams = append(mountParams, fmt.Sprintf("--%s=%v", k, v))
+		}
+	}
+
+	if sloppyMount != true && len(errorParams) > 0 {
+		err := fmt.Errorf("Incompatibles mount options without sloppy mount mode !")
+		logger.Error("mount-opts", err, lager.Data{"errors": errorParams})
+		return err
+	}
+
+	if len(errorParams) > 0 {
+		logger.Info("mount-opts", lager.Data{"ignore": errorParams})
+	}
+
+	if len(mountParams) == 4 {
+		mountParams = append(mountParams, "-a");
+	}
+
+	logger.Debug("exec-mount", lager.Data{"params": strings.Join(mountParams, ",")})
+	_, err := m.invoker.Invoke(env, "fuse-nfs", mountParams)
+
+	return err
+}
+
+func (m *nfsV3Mounter) Unmount(env voldriver.Env, target string) error {
+	_, err := m.invoker.Invoke(env, "fusermount", []string{"-u", target})
+	return err
+}
+
+func (m *nfsV3Mounter) Check(env voldriver.Env, name, mountPoint string) bool {
+	ctx, _ := context.WithDeadline(context.TODO(), time.Now().Add(time.Second*5))
+	env = driverhttp.EnvWithContext(ctx, env)
+	_, err := m.invoker.Invoke(env, "mountpoint", []string{"-q", mountPoint})
+
+	if err != nil {
+		// Note: Created volumes (with no mounts) will be removed
+		//       since VolumeInfo.Mountpoint will be an empty string
+		env.Logger().Info(fmt.Sprintf("unable to verify volume %s (%s)", name, err.Error()))
+		return false
+	}
+	return true
+}
+
+func stringInSlice(a string, list []string) bool {
+
+	for _, b := range list {
+		if b == a {
+			return true
+		}
+	}
+
+	return false
+}
+
+func readConfigNFS(logger lager.Logger) ([]string, error) {
+
+	type Config struct {
+		mountOptions []string
+	}
+
+	filename, _ := filepath.Abs("manifest.yml")
+	yamlFile, err := ioutil.ReadFile(filename)
+
+	if err != nil {
+		logger.Error("read NFS Config", err, lager.Data{"file": filename, "yaml": yamlFile})
+		return nil, err
+	}
+
+	var config Config
+
+	err = yaml.Unmarshal(yamlFile, &config)
+
+	if err != nil {
+		logger.Error("Parse NFS Config", err, lager.Data{"config": config})
+		return nil, err
+	}
+
+	return config.mountOptions, nil
+}
+
+func getDefaultConf() []string {
+
+	return []string{
 		// Fuse_NFS Options
 		"fusenfs_allow_other_own_ids",
 		"fusenfs_uid",
@@ -75,69 +191,4 @@ func (m *nfsV3Mounter) Mount(env voldriver.Env, source string, target string, op
 		"readdir_ino",
 		"debug",
 	}
-
-	for k, v := range opts {
-
-		if !in_array(k, whitelist) {
-			continue
-		}
-
-		logger.Debug("Parse one Options ", lager.Data{"Key": k, "value": v})
-
-		val, err := v.(bool)
-
-		if err {
-			if val {
-				mountParams = append(mountParams, fmt.Sprintf("--%s", k))
-			}
-		} else {
-			mountParams = append(mountParams, fmt.Sprintf("--%s=%v", k, v))
-		}
-	}
-
-	if len(mountParams) == 4 {
-		mountParams = append(mountParams, "-a");
-	}
-
-	logger.Debug("exec-mount", lager.Data{"params": strings.Join(mountParams, ",")})
-	_, err := m.invoker.Invoke(env, "fuse-nfs", mountParams)
-
-	return err
-}
-
-func (m *nfsV3Mounter) Unmount(env voldriver.Env, target string) error {
-	_, err := m.invoker.Invoke(env, "fusermount", []string{"-u", target})
-	return err
-}
-
-func (m *nfsV3Mounter) Check(env voldriver.Env, name, mountPoint string) bool {
-	ctx, _ := context.WithDeadline(context.TODO(), time.Now().Add(time.Second*5))
-	env = driverhttp.EnvWithContext(ctx, env)
-	_, err := m.invoker.Invoke(env, "mountpoint", []string{"-q", mountPoint})
-
-	if err != nil {
-		// Note: Created volumes (with no mounts) will be removed
-		//       since VolumeInfo.Mountpoint will be an empty string
-		env.Logger().Info(fmt.Sprintf("unable to verify volume %s (%s)", name, err.Error()))
-		return false
-	}
-	return true
-}
-
-func in_array(val interface{}, array interface{}) (exists bool) {
-	exists = false
-
-	switch reflect.TypeOf(array).Kind() {
-	case reflect.Slice:
-		s := reflect.ValueOf(array)
-
-		for i := 0; i < s.Len(); i++ {
-			if reflect.DeepEqual(val, s.Index(i).Interface()) == true {
-				exists = true
-				return
-			}
-		}
-	}
-
-	return
 }

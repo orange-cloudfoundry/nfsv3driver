@@ -142,7 +142,7 @@ var _ = Describe("NfsV3Mounter", func() {
 	})
 
 	Context("#Mount_opts", func() {
-		Context("when mount succeeds", func() {
+		Context("when mount succeeds with sloppy mount", func() {
 			BeforeEach(func() {
 				fakeInvoker.InvokeReturns(nil, nil)
 
@@ -150,6 +150,7 @@ var _ = Describe("NfsV3Mounter", func() {
 				opts["multithread"] 		= false
 				opts["fusenfs_uid"] 		= 1004
 				opts["fusenfs_gid"] 		= "1004"
+				opts["sloppy_mount"] 		= true
 				opts["no_exists_opts"] 		= "example"
 
 				err = subject.Mount(env, "source", "target", opts)
@@ -169,6 +170,24 @@ var _ = Describe("NfsV3Mounter", func() {
 				Expect(args[4]).To(Equal("--default_permissions"))
 				Expect(args[5]).To(Equal("--fusenfs_uid=1004"))
 				Expect(args[6]).To(Equal("--fusenfs_gid=1004"))
+			})
+		})
+
+		Context("when mount errors without sloppy mount", func() {
+			BeforeEach(func() {
+				fakeInvoker.InvokeReturns(nil, nil)
+
+				opts["default_permissions"] 	= true
+				opts["multithread"] 		= false
+				opts["fusenfs_uid"] 		= 1004
+				opts["fusenfs_gid"] 		= "1004"
+				opts["no_exists_opts"] 		= "example"
+
+				err = subject.Mount(env, "source", "target", opts)
+			})
+
+			It("should return without error", func() {
+				Expect(err).To(HaveOccurred())
 			})
 		})
 
