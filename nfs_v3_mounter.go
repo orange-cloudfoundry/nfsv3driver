@@ -2,6 +2,7 @@ package nfsv3driver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -13,13 +14,21 @@ import (
 	"code.cloudfoundry.org/voldriver/invoker"
 
 	"strings"
-	"path/filepath"
 	"io/ioutil"
 	"gopkg.in/yaml.v2"
+	"os"
+	"strconv"
 )
 
 type nfsV3Mounter struct {
 	invoker invoker.Invoker
+}
+
+type Config struct {
+	sourceOptions map[string]string
+	mountOptions map[string]string
+
+	sloppyMount bool
 }
 
 func NewNfsV3Mounter(invoker invoker.Invoker) nfsdriver.Mounter {
@@ -31,60 +40,31 @@ func (m *nfsV3Mounter) Mount(env voldriver.Env, source string, target string, op
 	logger.Info("start")
 	defer logger.Info("end")
 
+	myCnf := new(Config)
+
+	if err := myCnf.getConf("config.yml", logger); err != nil {
+		return err;
+	}
+
+	if err := myCnf.filterMount(opts, logger); err != nil {
+		return err;
+	}
+
+	if err := myCnf.makeShare(&source, logger); err != nil {
+		return err;
+	}
+
 	logger.Debug("parse-mount", lager.Data{"source": source, "target": target, "options": opts})
 
-	mountParams := []string{
+	mountParams := append([]string{
 		"-n", source,
 		"-m", target,
-	}
+	}, myCnf.getMountOptions(logger)...)
 
-	myCnf, ok := readConfigNFS(logger);
-
-	if ok != nil {
-		myCnf = getDefaultConf();
-	}
-
-	var errorParams []string
-	sloppyMount := false
-
-	for k, v := range opts {
-
-		val, err := v.(bool)
-
-		if k == "sloppy_mount" || k == "-s" {
-			sloppyMount = val && err
-			continue
+	if _,ok := myCnf.mountOptions["a"]; !ok {
+		if len(mountParams) <= 4 {
+			mountParams = append(mountParams, "-a")
 		}
-
-		if !stringInSlice(k, myCnf) {
-			errorParams = append(errorParams, k)
-			continue
-		}
-
-		logger.Debug("Whitelisted options", lager.Data{"Options": k})
-
-		if err {
-			if val {
-				mountParams = append(mountParams, fmt.Sprintf("--%s", k))
-			}
-
-		} else {
-			mountParams = append(mountParams, fmt.Sprintf("--%s=%v", k, v))
-		}
-	}
-
-	if sloppyMount != true && len(errorParams) > 0 {
-		err := fmt.Errorf("Incompatibles mount options without sloppy mount mode !")
-		logger.Error("mount-opts", err, lager.Data{"errors": errorParams})
-		return err
-	}
-
-	if len(errorParams) > 0 {
-		logger.Info("mount-opts", lager.Data{"ignore": errorParams})
-	}
-
-	if len(mountParams) == 4 {
-		mountParams = append(mountParams, "-a");
 	}
 
 	logger.Debug("exec-mount", lager.Data{"params": strings.Join(mountParams, ",")})
@@ -112,83 +92,253 @@ func (m *nfsV3Mounter) Check(env voldriver.Env, name, mountPoint string) bool {
 	return true
 }
 
-func stringInSlice(a string, list []string) bool {
+func (m *Config) getConf(configPath string, logger lager.Logger) error {
 
-	for _, b := range list {
-		if b == a {
-			return true
+	type ConfigYaml  struct {
+		SrcString string `yaml:"source_params"`
+		MntString string `yaml:"mount_params"`
+	}
+
+	file, err := os.Open(configPath)
+	if err != nil {
+		logger.Fatal("nfsv3driver-config", err, lager.Data{"file": configPath})
+	}
+	defer file.Close()
+
+	data, err := ioutil.ReadAll(file)
+	if err != nil {
+		logger.Fatal("nfsv3driver-config", err, lager.Data{"file": configPath})
+	}
+
+	var configYaml ConfigYaml
+
+	err = yaml.Unmarshal(data, &configYaml)
+	if err != nil {
+		logger.Fatal("nfsv3driver-config", err, lager.Data{"file": configPath})
+	}
+
+	m.mountOptions = m.parseConfig(strings.Split(configYaml.MntString, ","))
+	m.sourceOptions = m.parseConfig(strings.Split(configYaml.SrcString, ","))
+	m.sloppyMount = m.initSloppyMount()
+
+	logger.Debug("nfsv3driver-config-loaded", lager.Data{"sloppyMount": m.sloppyMount, "sourceOptions": m.sourceOptions, "mountOptions": m.mountOptions})
+
+	return nil
+}
+
+func (m *Config) parseConfig(listEntry []string) map[string]string {
+
+	result := map[string]string{}
+
+	for _,opt := range listEntry {
+
+		key := strings.SplitN(opt, ":", 2)
+
+		if len(key[0]) < 1 {
+			continue
+		}
+
+		if len(key[1]) < 1 {
+			result[key[0]] = ""
+		} else {
+			result[key[0]] = key[1]
+		}
+	}
+
+	return result
+}
+
+func (m *Config) initSloppyMount() bool {
+	if _, ok := m.mountOptions["sloppy_mount"]; ok {
+
+		if val,err := strconv.ParseBool(m.mountOptions["sloppy_mount"]); err == nil {
+			return val
 		}
 	}
 
 	return false
 }
 
-func readConfigNFS(logger lager.Logger) ([]string, error) {
+func (m *Config) filterSource (entryList []string, logger lager.Logger) error {
 
-	type Config struct {
-		mountOptions []string
+	var errorList []string
+
+	for _, p := range entryList {
+
+		op := strings.SplitN(p, "=", 2)
+
+		if len (op) < 2 || len(op[1]) < 1 || op[1] == "" {
+			continue
+		}
+
+		if _,ok := m.sourceOptions[op[0]]; !ok {
+			errorList = append(errorList, op[0]);
+			continue
+		}
+
+		m.sourceOptions[op[0]] = op[1]
 	}
 
-	filename, _ := filepath.Abs("manifest.yml")
-	yamlFile, err := ioutil.ReadFile(filename)
+	logger.Debug("nfsv3driver-source-opts-parsed", lager.Data{"config": m.sourceOptions, "error": errorList})
 
-	if err != nil {
-		logger.Error("read NFS Config", err, lager.Data{"file": filename, "yaml": yamlFile})
-		return nil, err
+	if len(errorList) > 0 && !m.sloppyMount {
+		err := errors.New("Incompatibles source options !")
+		logger.Error("nfsv3driver-source-opts", err, lager.Data{"errors": errorList})
+		return err
 	}
 
-	var config Config
-
-	err = yaml.Unmarshal(yamlFile, &config)
-
-	if err != nil {
-		logger.Error("Parse NFS Config", err, lager.Data{"config": config})
-		return nil, err
+	if len(errorList) > 0 {
+		logger.Info("nfsv3driver-source-opts", lager.Data{"imcopatibles-opts": errorList})
 	}
 
-	return config.mountOptions, nil
+	return nil
 }
 
-func getDefaultConf() []string {
+func (m *Config) filterMount (entryList map[string]interface{}, logger lager.Logger) error {
 
-	return []string{
-		// Fuse_NFS Options
-		"fusenfs_allow_other_own_ids",
-		"fusenfs_uid",
-		"fusenfs_gid",
+	var errorList []string
 
-		// libNFS options
-		// options for libnfs need to be
-		// pass direction url form for share
+	cleanEntry := m.uniformEntry(entryList, logger)
 
-		// Fuse Option (see man mount.fuse)
-		"default_permissions",
-		"multithread",
-		"allow_other",
-		"allow_root",
-		"umask",
-		"direct_io",
-		"kernel_cache",
-		"auto_cache",
-		"entry_timeout",
-		"negative_timeout",
-		"attr_timeout",
-		"ac_attr_timeout",
-		"large_read",
-		"hard_remove",
-		"fsname",
-		"subtype",
-		"blkdev",
-		"intr",
-		"mount_max",
-		"max_read",
-		"max_readahead",
-		"async_read",
-		"sync_read",
-		"nonempty",
-		"intr_signal",
-		"use_ino",
-		"readdir_ino",
-		"debug",
+	for k, v := range cleanEntry {
+
+		if v == ""  {
+			continue
+		}
+
+		if _,ok := m.mountOptions[k]; !ok {
+			errorList = append(errorList, k);
+			continue
+		}
+
+		if val, err := strconv.ParseBool(v); err == nil {
+			if val == true && k == "sloppy_mount" {
+				m.sloppyMount = true
+				continue
+			}
+		}
+
+		m.mountOptions[k] = v
 	}
+
+	logger.Debug("nfsv3driver-mount-opts-parsed", lager.Data{"config": m.mountOptions, "error": errorList})
+
+	if len(errorList) > 0 && !m.sloppyMount {
+		err := errors.New("Incompatibles source options !")
+		logger.Error("nfsv3driver-mount-opts", err, lager.Data{"errors": errorList})
+		return err
+	}
+
+	if len(errorList) > 0 {
+		logger.Info("nfsv3driver-mount-opts", lager.Data{"imcompatibles-opts": errorList})
+	}
+
+	return nil
+}
+
+func (m *Config) makeShare(url *string, logger lager.Logger) error {
+
+	srcPart := strings.SplitN(*url, "?", 2)
+
+	if len(srcPart) == 1 {
+		srcPart = append(srcPart, "")
+	}
+
+	if err := m.filterSource(strings.Split(srcPart[1], "&"), logger); err != nil {
+		return err;
+	}
+
+	paramsList := []string{}
+
+	for k,v := range m.sourceOptions  {
+		if v == "" {
+			continue
+		}
+
+		if val, err := strconv.ParseBool(v); err == nil {
+			if val == true {
+				paramsList = append(paramsList, fmt.Sprintf("%s=1", k))
+			} else {
+				paramsList = append(paramsList, fmt.Sprintf("%s=0", k))
+			}
+			continue
+		}
+
+		if val, err := strconv.ParseInt(v, 10, 16); err == nil {
+			paramsList = append(paramsList, fmt.Sprintf("%s=%d", k, val))
+			continue
+		}
+
+		paramsList = append(paramsList, fmt.Sprintf("%s=%s", k, v))
+	}
+
+	srcPart[1] = strings.Join(paramsList, "&")
+
+	if len(srcPart[1]) < 1 {
+		*url = srcPart[0]
+	} else {
+		*url = strings.Join(srcPart, "?")
+	}
+
+	return nil
+}
+
+func (m *Config) getMountOptions(logger lager.Logger) []string {
+
+	result := []string{}
+	var pid string
+
+	for k,v := range m.mountOptions  {
+
+		if k == "sloppy_mount" || v == "" {
+			continue
+		}
+
+		if len(k) == 1 {
+			pid = "-"
+		} else {
+			pid = "--"
+		}
+
+		if val, err := strconv.ParseBool(v); err == nil {
+			if (val == true) {
+				result = append(result, fmt.Sprintf("%s%s", pid, k))
+			}
+			continue
+		}
+
+		if val, err := strconv.ParseInt(v, 10, 16); err == nil {
+			result = append(result, fmt.Sprintf("%s%s=%d", pid, k, val))
+			continue
+		}
+
+		result = append(result, fmt.Sprintf("%s%s=%s", pid, k, v))
+	}
+
+	return result
+}
+
+func (m *Config) uniformEntry (entryList map[string]interface{}, logger lager.Logger) map[string]string {
+
+	result := map[string]string{}
+
+	for k, v := range entryList {
+
+		var value interface{}
+
+		switch v.(type) {
+		case int:
+			value = strconv.FormatInt(int64(v.(int)), 10)
+		case string:
+			value = v.(string)
+		case bool:
+			value = strconv.FormatBool(v.(bool))
+		default:
+			value = ""
+		}
+
+		result[k] = value.(string)
+	}
+
+	return result
 }

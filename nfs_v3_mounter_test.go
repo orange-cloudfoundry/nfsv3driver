@@ -147,10 +147,10 @@ var _ = Describe("NfsV3Mounter", func() {
 				fakeInvoker.InvokeReturns(nil, nil)
 
 				opts["default_permissions"] 	= true
-				opts["multithread"] 		= false
-				opts["fusenfs_uid"] 		= 1004
-				opts["fusenfs_gid"] 		= "1004"
-				opts["sloppy_mount"] 		= true
+				opts["multithread"] 		= "false"
+				opts["fusenfs_uid"] 		= "1004"
+				opts["fusenfs_gid"] 		= 1004
+				opts["sloppy_mount"] 		= "true"
 				opts["no_exists_opts"] 		= "example"
 
 				err = subject.Mount(env, "source", "target", opts)
@@ -167,6 +167,7 @@ var _ = Describe("NfsV3Mounter", func() {
 				Expect(args[1]).To(Equal("source"))
 				Expect(args[2]).To(Equal("-m"))
 				Expect(args[3]).To(Equal("target"))
+
 				Expect(args[4]).To(Equal("--default_permissions"))
 				Expect(args[5]).To(Equal("--fusenfs_uid=1004"))
 				Expect(args[6]).To(Equal("--fusenfs_gid=1004"))
@@ -178,7 +179,7 @@ var _ = Describe("NfsV3Mounter", func() {
 				fakeInvoker.InvokeReturns(nil, nil)
 
 				opts["default_permissions"] 	= true
-				opts["multithread"] 		= false
+				opts["multithread"] 		= "false"
 				opts["fusenfs_uid"] 		= 1004
 				opts["fusenfs_gid"] 		= "1004"
 				opts["no_exists_opts"] 		= "example"
