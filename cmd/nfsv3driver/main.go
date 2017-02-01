@@ -90,6 +90,12 @@ var insecureSkipVerify = flag.Bool(
 	"whether SSL communication should skip verification of server IP addresses in the certificate",
 )
 
+var configPath = flag.String(
+	"config",
+	"config.yml",
+	"Specify the config file path",
+);
+
 const fsType = "nfs4"
 const mountOptions = "vers=4.0,rsize=1048576,wsize=1048576,hard,intr,timeo=600,retrans=2,actimeo=0"
 
@@ -102,7 +108,7 @@ func main() {
 	logger.Info("start")
 	defer logger.Info("end")
 
-	mounter := nfsv3driver.NewNfsV3Mounter(invoker.NewRealInvoker())
+	mounter := nfsv3driver.NewNfsV3Mounter(invoker.NewRealInvoker(), configPath)
 
 	client := nfsdriver.NewNfsDriver(
 		logger,

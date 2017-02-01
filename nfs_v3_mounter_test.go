@@ -13,6 +13,7 @@ import (
 	"code.cloudfoundry.org/voldriver/voldriverfakes"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"strings"
 )
 
 var _ = Describe("NfsV3Mounter", func() {
@@ -38,7 +39,7 @@ var _ = Describe("NfsV3Mounter", func() {
 
 		fakeInvoker = &voldriverfakes.FakeInvoker{}
 
-		subject = nfsv3driver.NewNfsV3Mounter(fakeInvoker)
+		subject = nfsv3driver.NewNfsV3Mounter(fakeInvoker, "example.yml")
 	})
 
 	Context("#Mount", func() {
@@ -54,12 +55,13 @@ var _ = Describe("NfsV3Mounter", func() {
 
 			It("should use the passed in variables", func() {
 				_, cmd, args := fakeInvoker.InvokeArgsForCall(0)
+				expected := reOrganizeArray(args, []string{
+					"-n", "source", "-m", "target", "-a",
+				})
 				Expect(cmd).To(Equal("fuse-nfs"))
-				Expect(args[0]).To(Equal("-n"))
-				Expect(args[1]).To(Equal("source"))
-				Expect(args[2]).To(Equal("-m"))
-				Expect(args[3]).To(Equal("target"))
-				Expect(args[4]).To(Equal("-a"))
+				Expect(args).To(Equal(expected))
+				Expect(strings.Join(args, " ")).To(ContainSubstring("-n source"))
+				Expect(strings.Join(args, " ")).To(ContainSubstring("-m target"))
 			})
 		})
 
@@ -96,7 +98,11 @@ var _ = Describe("NfsV3Mounter", func() {
 			It("should use the passed in variables", func() {
 				_, cmd, args := fakeInvoker.InvokeArgsForCall(0)
 				Expect(cmd).To(Equal("fusermount"))
-				Expect(args[1]).To(Equal("target"))
+				//Expect(args[1]).To(Equal("target"))
+
+				expected := []string{"-u", "target"}
+				Expect(args).To(Equal(expected))
+				Expect(strings.Join(args, " ")).To(ContainSubstring("-u target"))
 			})
 		})
 
@@ -163,14 +169,14 @@ var _ = Describe("NfsV3Mounter", func() {
 			It("should use the passed in variables", func() {
 				_, cmd, args := fakeInvoker.InvokeArgsForCall(0)
 				Expect(cmd).To(Equal("fuse-nfs"))
-				Expect(args[0]).To(Equal("-n"))
-				Expect(args[1]).To(Equal("source"))
-				Expect(args[2]).To(Equal("-m"))
-				Expect(args[3]).To(Equal("target"))
-
-				Expect(args[4]).To(Equal("--default_permissions"))
-				Expect(args[5]).To(Equal("--fusenfs_uid=1004"))
-				Expect(args[6]).To(Equal("--fusenfs_gid=1004"))
+				expected := reOrganizeArray(args, []string{
+					"-n", "source", "-m", "target",
+					"--default_permissions", "--fusenfs_uid=1004", "--fusenfs_gid=1004",
+				})
+				Expect(cmd).To(Equal("fuse-nfs"))
+				Expect(args).To(Equal(expected))
+				Expect(strings.Join(args, " ")).To(ContainSubstring("-n source"))
+				Expect(strings.Join(args, " ")).To(ContainSubstring("-m target"))
 			})
 		})
 
@@ -210,3 +216,31 @@ var _ = Describe("NfsV3Mounter", func() {
 	})
 
 })
+
+func reOrganizeArray(actual []string, expected []string) []string {
+	newExpected := []string{}
+
+	for _,a := range actual {
+		if inArray(a, expected) {
+			newExpected = append(newExpected, a);
+		}
+	}
+
+	for _,e := range expected {
+		if !inArray(e, expected) {
+			newExpected = append(newExpected, e);
+		}
+	}
+
+	return newExpected
+}
+
+func inArray (search string, array []string) bool {
+	for _,v := range array {
+		if v == search {
+			return true
+		}
+	}
+
+	return false
+}

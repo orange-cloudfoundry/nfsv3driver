@@ -22,6 +22,7 @@ import (
 
 type nfsV3Mounter struct {
 	invoker invoker.Invoker
+	configPath string
 }
 
 type Config struct {
@@ -31,8 +32,8 @@ type Config struct {
 	sloppyMount bool
 }
 
-func NewNfsV3Mounter(invoker invoker.Invoker) nfsdriver.Mounter {
-	return &nfsV3Mounter{invoker}
+func NewNfsV3Mounter(invoker invoker.Invoker, configPath string) nfsdriver.Mounter {
+	return &nfsV3Mounter{invoker, configPath}
 }
 
 func (m *nfsV3Mounter) Mount(env voldriver.Env, source string, target string, opts map[string]interface{}) error {
@@ -42,7 +43,7 @@ func (m *nfsV3Mounter) Mount(env voldriver.Env, source string, target string, op
 
 	myCnf := new(Config)
 
-	if err := myCnf.getConf("config.yml", logger); err != nil {
+	if err := myCnf.getConf(m.configPath, logger); err != nil {
 		return err;
 	}
 
