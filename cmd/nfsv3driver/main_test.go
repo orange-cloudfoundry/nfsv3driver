@@ -45,4 +45,20 @@ var _ = Describe("Main", func() {
 			}, 5).ShouldNot(HaveOccurred())
 		})
 	})
+
+	Context("with a driver path & config flag", func() {
+		BeforeEach(func() {
+			dir, err := ioutil.TempDir("", "driversPath")
+			Expect(err).ToNot(HaveOccurred())
+
+			command.Args = append(command.Args, "-driversPath="+dir, "-config=./example.yml")
+		})
+
+		It("listens on tcp/7589 by default", func() {
+			EventuallyWithOffset(1, func() error {
+				_, err := net.Dial("tcp", "0.0.0.0:7589")
+				return err
+			}, 5).ShouldNot(HaveOccurred())
+		})
+	})
 })

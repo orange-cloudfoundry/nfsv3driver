@@ -92,7 +92,7 @@ var insecureSkipVerify = flag.Bool(
 
 var configPath = flag.String(
 	"config",
-	"config.yml",
+	"./config.yml",
 	"Specify the config file path",
 );
 
