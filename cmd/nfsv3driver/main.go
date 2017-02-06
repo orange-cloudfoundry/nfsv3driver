@@ -108,7 +108,7 @@ func main() {
 	logger.Info("start")
 	defer logger.Info("end")
 
-	mounter := nfsv3driver.NewNfsV3Mounter(invoker.NewRealInvoker(), configPath)
+	mounter := nfsv3driver.NewNfsV3Mounter(invoker.NewRealInvoker(), *configPath)
 
 	client := nfsdriver.NewNfsDriver(
 		logger,
