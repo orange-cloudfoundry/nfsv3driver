@@ -46,12 +46,60 @@ var _ = Describe("Main", func() {
 		})
 	})
 
-	Context("with a driver path & config flag", func() {
+	Context("with a driver path & sourceAllowed flag", func() {
 		BeforeEach(func() {
 			dir, err := ioutil.TempDir("", "driversPath")
 			Expect(err).ToNot(HaveOccurred())
 
-			command.Args = append(command.Args, "-driversPath="+dir, "-config=./example.yml")
+			command.Args = append(command.Args, "-driversPath="+dir, "-sourceAllowed=\"uid,gid\"")
+		})
+
+		It("listens on tcp/7589 by default", func() {
+			EventuallyWithOffset(1, func() error {
+				_, err := net.Dial("tcp", "0.0.0.0:7589")
+				return err
+			}, 5).ShouldNot(HaveOccurred())
+		})
+	})
+
+	Context("with a driver path & sourceDefault flag", func() {
+		BeforeEach(func() {
+			dir, err := ioutil.TempDir("", "driversPath")
+			Expect(err).ToNot(HaveOccurred())
+
+			command.Args = append(command.Args, "-driversPath="+dir, "-sourceDefault=\"uid:1000,gid:1000\"")
+		})
+
+		It("listens on tcp/7589 by default", func() {
+			EventuallyWithOffset(1, func() error {
+				_, err := net.Dial("tcp", "0.0.0.0:7589")
+				return err
+			}, 5).ShouldNot(HaveOccurred())
+		})
+	})
+
+	Context("with a driver path & sourceAllowed flag", func() {
+		BeforeEach(func() {
+			dir, err := ioutil.TempDir("", "driversPath")
+			Expect(err).ToNot(HaveOccurred())
+
+			command.Args = append(command.Args, "-driversPath="+dir, "-sourceAllowed=\"sloppy_mount,nfs_uid,nfs_gid\"")
+		})
+
+		It("listens on tcp/7589 by default", func() {
+			EventuallyWithOffset(1, func() error {
+				_, err := net.Dial("tcp", "0.0.0.0:7589")
+				return err
+			}, 5).ShouldNot(HaveOccurred())
+		})
+	})
+
+	Context("with a driver path & sourceAllowed flag", func() {
+		BeforeEach(func() {
+			dir, err := ioutil.TempDir("", "driversPath")
+			Expect(err).ToNot(HaveOccurred())
+
+			command.Args = append(command.Args, "-driversPath="+dir, "-sourceAllowed=\"sloppy_mount:true,nfs_uid:1000,nfs_gid:1000\"")
 		})
 
 		It("listens on tcp/7589 by default", func() {

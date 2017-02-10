@@ -39,7 +39,10 @@ var _ = Describe("NfsV3Mounter", func() {
 
 		fakeInvoker = &voldriverfakes.FakeInvoker{}
 
-		subject = nfsv3driver.NewNfsV3Mounter(fakeInvoker, "example.yml")
+		subject = nfsv3driver.NewNfsV3Mounter(fakeInvoker, nfsv3driver.NewNfsV3Config(
+			[]string{"uid,gid", ""},
+			[]string{"sloppy_mount,fusenfs_uid,fusenfs_gid,multithread,default_permissions", "sloppy_mount:true"},
+		))
 	})
 
 	Context("#Mount", func() {
@@ -55,11 +58,10 @@ var _ = Describe("NfsV3Mounter", func() {
 
 			It("should use the passed in variables", func() {
 				_, cmd, args := fakeInvoker.InvokeArgsForCall(0)
-				expected := reOrganizeArray(args, []string{
-					"-n", "source", "-m", "target", "-a",
-				})
 				Expect(cmd).To(Equal("fuse-nfs"))
-				Expect(args).To(Equal(expected))
+				testMountOptions(args, []string{
+					"-n", "source", "-m", "target",
+				})
 				Expect(strings.Join(args, " ")).To(ContainSubstring("-n source"))
 				Expect(strings.Join(args, " ")).To(ContainSubstring("-m target"))
 			})
@@ -68,7 +70,6 @@ var _ = Describe("NfsV3Mounter", func() {
 		Context("when mount errors", func() {
 			BeforeEach(func() {
 				fakeInvoker.InvokeReturns([]byte("error"), fmt.Errorf("error"))
-
 				err = subject.Mount(env, "source", "target", opts)
 			})
 
@@ -109,6 +110,7 @@ var _ = Describe("NfsV3Mounter", func() {
 		Context("when unmount fails", func() {
 			BeforeEach(func() {
 				fakeInvoker.InvokeReturns([]byte("error"), fmt.Errorf("error"))
+
 				err = subject.Unmount(env, "target")
 			})
 
@@ -169,12 +171,10 @@ var _ = Describe("NfsV3Mounter", func() {
 			It("should use the passed in variables", func() {
 				_, cmd, args := fakeInvoker.InvokeArgsForCall(0)
 				Expect(cmd).To(Equal("fuse-nfs"))
-				expected := reOrganizeArray(args, []string{
+				testMountOptions(args, []string{
 					"-n", "source", "-m", "target",
 					"--default_permissions", "--fusenfs_uid=1004", "--fusenfs_gid=1004",
 				})
-				Expect(cmd).To(Equal("fuse-nfs"))
-				Expect(args).To(Equal(expected))
 				Expect(strings.Join(args, " ")).To(ContainSubstring("-n source"))
 				Expect(strings.Join(args, " ")).To(ContainSubstring("-m target"))
 			})
@@ -217,26 +217,20 @@ var _ = Describe("NfsV3Mounter", func() {
 
 })
 
-func reOrganizeArray(actual []string, expected []string) []string {
-	newExpected := []string{}
+func testMountOptions(args []string, expected []string) {
+	Expect(len(args)).To(Equal(len(expected)))
 
-	for _,a := range actual {
-		if inArray(a, expected) {
-			newExpected = append(newExpected, a);
-		}
+	for _,p := range args {
+		Expect(inArray(p, expected)).To(BeTrue())
 	}
 
-	for _,e := range expected {
-		if !inArray(e, expected) {
-			newExpected = append(newExpected, e);
-		}
+	for _,p := range expected {
+		Expect(inArray(p, args)).To(BeTrue())
 	}
-
-	return newExpected
 }
 
-func inArray (search string, array []string) bool {
-	for _,v := range array {
+func inArray (search string, slice []string) bool {
+	for _,v := range slice {
 		if v == search {
 			return true
 		}
