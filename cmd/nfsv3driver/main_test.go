@@ -46,12 +46,12 @@ var _ = Describe("Main", func() {
 		})
 	})
 
-	Context("with a driver path & sourceAllowed flag", func() {
+	Context("with a driver path & allowed-in-source flag", func() {
 		BeforeEach(func() {
 			dir, err := ioutil.TempDir("", "driversPath")
 			Expect(err).ToNot(HaveOccurred())
 
-			command.Args = append(command.Args, "-driversPath="+dir, "-sourceAllowed=\"uid,gid\"")
+			command.Args = append(command.Args, "-driversPath="+dir, "-allowed-in-source=\"uid,gid\"")
 		})
 
 		It("listens on tcp/7589 by default", func() {
@@ -62,12 +62,12 @@ var _ = Describe("Main", func() {
 		})
 	})
 
-	Context("with a driver path & sourceDefault flag", func() {
+	Context("with a driver path & default-in-source flag", func() {
 		BeforeEach(func() {
 			dir, err := ioutil.TempDir("", "driversPath")
 			Expect(err).ToNot(HaveOccurred())
 
-			command.Args = append(command.Args, "-driversPath="+dir, "-sourceDefault=\"uid:1000,gid:1000\"")
+			command.Args = append(command.Args, "-driversPath="+dir, "-default-in-source=\"uid:1000,gid:1000\"")
 		})
 
 		It("listens on tcp/7589 by default", func() {
@@ -78,12 +78,12 @@ var _ = Describe("Main", func() {
 		})
 	})
 
-	Context("with a driver path & sourceAllowed flag", func() {
+	Context("with a driver path & allowed-in-source flag", func() {
 		BeforeEach(func() {
 			dir, err := ioutil.TempDir("", "driversPath")
 			Expect(err).ToNot(HaveOccurred())
 
-			command.Args = append(command.Args, "-driversPath="+dir, "-sourceAllowed=\"sloppy_mount,nfs_uid,nfs_gid\"")
+			command.Args = append(command.Args, "-driversPath="+dir, "-allowed-in-source=\"sloppy_mount,nfs_uid,nfs_gid\"")
 		})
 
 		It("listens on tcp/7589 by default", func() {
@@ -94,12 +94,12 @@ var _ = Describe("Main", func() {
 		})
 	})
 
-	Context("with a driver path & sourceAllowed flag", func() {
+	Context("with a driver path & allowed-in-source flag", func() {
 		BeforeEach(func() {
 			dir, err := ioutil.TempDir("", "driversPath")
 			Expect(err).ToNot(HaveOccurred())
 
-			command.Args = append(command.Args, "-driversPath="+dir, "-sourceAllowed=\"sloppy_mount:true,nfs_uid:1000,nfs_gid:1000\"")
+			command.Args = append(command.Args, "-driversPath="+dir, "-allowed-in-source=\"sloppy_mount:true,nfs_uid:1000,nfs_gid:1000\"")
 		})
 
 		It("listens on tcp/7589 by default", func() {
