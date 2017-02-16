@@ -5,20 +5,22 @@ import (
 	"fmt"
 	"time"
 
-
 	"code.cloudfoundry.org/lager"
 	"code.cloudfoundry.org/nfsdriver"
 	"code.cloudfoundry.org/voldriver"
 	"code.cloudfoundry.org/voldriver/driverhttp"
 	"code.cloudfoundry.org/voldriver/invoker"
+
+	"strings"
 )
 
 type nfsV3Mounter struct {
 	invoker invoker.Invoker
+	config  Config
 }
 
-func NewNfsV3Mounter(invoker invoker.Invoker) nfsdriver.Mounter {
-	return &nfsV3Mounter{invoker}
+func NewNfsV3Mounter(invoker invoker.Invoker, config **Config) nfsdriver.Mounter {
+	return &nfsV3Mounter{invoker, **config}
 }
 
 func (m *nfsV3Mounter) Mount(env voldriver.Env, source string, target string, opts map[string]interface{}) error {
@@ -26,8 +28,50 @@ func (m *nfsV3Mounter) Mount(env voldriver.Env, source string, target string, op
 	logger.Info("start")
 	defer logger.Info("end")
 
-	logger.Debug("exec-mount", lager.Data{"source": source, "target": target})
-	_, err := m.invoker.Invoke(env, "fuse-nfs", []string{"-a", "-n", source, "-m", target})
+	if err := m.config.setEntries(source, opts, []string{
+		"share", "mount", "kerberosPrincipal", "kerberosKeytab", "readonly",
+	}); err != nil {
+		logger.Debug("parse-entries", lager.Data{
+			"given_source":   source,
+			"given_target":   target,
+			"given_options":  opts,
+			"source.allowed": m.config.source.allowed,
+			"source.options": m.config.source.options,
+			"source.forced":  m.config.source.forced,
+			"mount.allowed":  m.config.mount.allowed,
+			"mount.options":  m.config.mount.options,
+			"mount.forced":   m.config.mount.forced,
+			"sloppy_mount":   m.config.sloppyMount,
+		})
+		return err
+	}
+
+	mountOptions := m.config.getMount()
+	sourceParsed := m.config.getShare(source)
+
+	logger.Debug("parse-mount", lager.Data{
+		"given_source":   source,
+		"given_target":   target,
+		"given_options":  opts,
+		"source.allowed": m.config.source.allowed,
+		"source.options": m.config.source.options,
+		"source.forced":  m.config.source.forced,
+		"mount.allowed":  m.config.mount.allowed,
+		"mount.options":  m.config.mount.options,
+		"mount.forced":   m.config.mount.forced,
+		"sloppy_mount":   m.config.sloppyMount,
+		"mountOptions":   mountOptions,
+		"sourceParsed":   sourceParsed,
+	})
+
+	mountParams := append([]string{
+		"-n", sourceParsed,
+		"-m", target,
+	}, mountOptions...)
+
+	logger.Debug("exec-mount", lager.Data{"params": strings.Join(mountParams, ",")})
+	_, err := m.invoker.Invoke(env, "fuse-nfs", mountParams)
+
 	return err
 }
 

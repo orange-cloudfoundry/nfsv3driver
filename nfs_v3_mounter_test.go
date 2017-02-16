@@ -13,6 +13,7 @@ import (
 	"code.cloudfoundry.org/voldriver/voldriverfakes"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"strings"
 )
 
 var _ = Describe("NfsV3Mounter", func() {
@@ -38,7 +39,10 @@ var _ = Describe("NfsV3Mounter", func() {
 
 		fakeInvoker = &voldriverfakes.FakeInvoker{}
 
-		subject = nfsv3driver.NewNfsV3Mounter(fakeInvoker)
+		subject = nfsv3driver.NewNfsV3Mounter(fakeInvoker, nfsv3driver.NewNfsV3Config(
+			[]string{"uid,gid", ""},
+			[]string{"sloppy_mount,fusenfs_uid,fusenfs_gid,multithread,default_permissions", "sloppy_mount:true"},
+		))
 	})
 
 	Context("#Mount", func() {
@@ -55,18 +59,17 @@ var _ = Describe("NfsV3Mounter", func() {
 			It("should use the passed in variables", func() {
 				_, cmd, args := fakeInvoker.InvokeArgsForCall(0)
 				Expect(cmd).To(Equal("fuse-nfs"))
-				Expect(args[0]).To(Equal("-a"))
-				Expect(args[1]).To(Equal("-n"))
-				Expect(args[2]).To(Equal("source"))
-				Expect(args[3]).To(Equal("-m"))
-				Expect(args[4]).To(Equal("target"))
+				testMountOptions(args, []string{
+					"-n", "source", "-m", "target",
+				})
+				Expect(strings.Join(args, " ")).To(ContainSubstring("-n source"))
+				Expect(strings.Join(args, " ")).To(ContainSubstring("-m target"))
 			})
 		})
 
 		Context("when mount errors", func() {
 			BeforeEach(func() {
 				fakeInvoker.InvokeReturns([]byte("error"), fmt.Errorf("error"))
-
 				err = subject.Mount(env, "source", "target", opts)
 			})
 
@@ -96,13 +99,18 @@ var _ = Describe("NfsV3Mounter", func() {
 			It("should use the passed in variables", func() {
 				_, cmd, args := fakeInvoker.InvokeArgsForCall(0)
 				Expect(cmd).To(Equal("fusermount"))
-				Expect(args[1]).To(Equal("target"))
+				//Expect(args[1]).To(Equal("target"))
+
+				expected := []string{"-u", "target"}
+				Expect(args).To(Equal(expected))
+				Expect(strings.Join(args, " ")).To(ContainSubstring("-u target"))
 			})
 		})
 
 		Context("when unmount fails", func() {
 			BeforeEach(func() {
 				fakeInvoker.InvokeReturns([]byte("error"), fmt.Errorf("error"))
+
 				err = subject.Unmount(env, "target")
 			})
 
@@ -140,4 +148,93 @@ var _ = Describe("NfsV3Mounter", func() {
 			})
 		})
 	})
+
+	Context("#Mount_opts", func() {
+		Context("when mount succeeds with sloppy mount", func() {
+			BeforeEach(func() {
+				fakeInvoker.InvokeReturns(nil, nil)
+
+				opts["default_permissions"] = true
+				opts["multithread"] = "false"
+				opts["fusenfs_uid"] = "1004"
+				opts["fusenfs_gid"] = 1004
+				opts["sloppy_mount"] = "true"
+				opts["no_exists_opts"] = "example"
+
+				err = subject.Mount(env, "source", "target", opts)
+			})
+
+			It("should return without error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should use the passed in variables", func() {
+				_, cmd, args := fakeInvoker.InvokeArgsForCall(0)
+				Expect(cmd).To(Equal("fuse-nfs"))
+				testMountOptions(args, []string{
+					"-n", "source", "-m", "target",
+					"--default_permissions", "--fusenfs_uid=1004", "--fusenfs_gid=1004",
+				})
+				Expect(strings.Join(args, " ")).To(ContainSubstring("-n source"))
+				Expect(strings.Join(args, " ")).To(ContainSubstring("-m target"))
+			})
+		})
+
+		Context("when mount errors without sloppy mount", func() {
+			BeforeEach(func() {
+				fakeInvoker.InvokeReturns(nil, nil)
+
+				opts["default_permissions"] = true
+				opts["multithread"] = "false"
+				opts["fusenfs_uid"] = 1004
+				opts["fusenfs_gid"] = "1004"
+				opts["no_exists_opts"] = "example"
+
+				err = subject.Mount(env, "source", "target", opts)
+			})
+
+			It("should return without error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+		})
+
+		Context("when mount errors", func() {
+			BeforeEach(func() {
+				fakeInvoker.InvokeReturns([]byte("error"), fmt.Errorf("error"))
+
+				err = subject.Mount(env, "source", "target", opts)
+			})
+
+			It("should return without error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+		})
+
+		Context("when mount is cancelled", func() {
+			// TODO: when we pick up the lager.Context
+		})
+	})
+
 })
+
+func testMountOptions(args []string, expected []string) {
+	Expect(len(args)).To(Equal(len(expected)))
+
+	for _, p := range args {
+		Expect(inArray(p, expected)).To(BeTrue())
+	}
+
+	for _, p := range expected {
+		Expect(inArray(p, args)).To(BeTrue())
+	}
+}
+
+func inArray(search string, slice []string) bool {
+	for _, v := range slice {
+		if v == search {
+			return true
+		}
+	}
+
+	return false
+}
