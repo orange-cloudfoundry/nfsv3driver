@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-
 	"code.cloudfoundry.org/lager"
 	"code.cloudfoundry.org/nfsdriver"
 	"code.cloudfoundry.org/voldriver"
@@ -17,7 +16,7 @@ import (
 
 type nfsV3Mounter struct {
 	invoker invoker.Invoker
-	config Config
+	config  Config
 }
 
 func NewNfsV3Mounter(invoker invoker.Invoker, config **Config) nfsdriver.Mounter {
@@ -30,39 +29,39 @@ func (m *nfsV3Mounter) Mount(env voldriver.Env, source string, target string, op
 	defer logger.Info("end")
 
 	if err := m.config.setEntries(source, opts, []string{
-		"share","mount","kerberosPrincipal","kerberosKeytab","readonly",
+		"share", "mount", "kerberosPrincipal", "kerberosKeytab", "readonly",
 	}); err != nil {
 		logger.Debug("parse-entries", lager.Data{
-			"given_share": source,
-			"given_target": target,
-			"given_options": opts,
+			"given_source":   source,
+			"given_target":   target,
+			"given_options":  opts,
 			"source.allowed": m.config.source.allowed,
 			"source.options": m.config.source.options,
 			"source.forced":  m.config.source.forced,
-			"mount.allowed": m.config.mount.allowed,
-			"mount.options": m.config.mount.options,
-			"mount.forced":  m.config.mount.forced,
-			"sloppy_mount": m.config.sloppyMount,
+			"mount.allowed":  m.config.mount.allowed,
+			"mount.options":  m.config.mount.options,
+			"mount.forced":   m.config.mount.forced,
+			"sloppy_mount":   m.config.sloppyMount,
 		})
-		return err;
+		return err
 	}
 
 	mountOptions := m.config.getMount()
 	sourceParsed := m.config.getShare(source)
 
 	logger.Debug("parse-mount", lager.Data{
-		"given_share": source,
-		"given_target": target,
-		"given_options": opts,
+		"given_source":   source,
+		"given_target":   target,
+		"given_options":  opts,
 		"source.allowed": m.config.source.allowed,
 		"source.options": m.config.source.options,
 		"source.forced":  m.config.source.forced,
-		"mount.allowed": m.config.mount.allowed,
-		"mount.options": m.config.mount.options,
-		"mount.forced":  m.config.mount.forced,
-		"sloppy_mount": m.config.sloppyMount,
-		"mountOptions": mountOptions,
-		"sourceParsed": sourceParsed,
+		"mount.allowed":  m.config.mount.allowed,
+		"mount.options":  m.config.mount.options,
+		"mount.forced":   m.config.mount.forced,
+		"sloppy_mount":   m.config.sloppyMount,
+		"mountOptions":   mountOptions,
+		"sourceParsed":   sourceParsed,
 	})
 
 	mountParams := append([]string{
@@ -94,4 +93,3 @@ func (m *nfsV3Mounter) Check(env voldriver.Env, name, mountPoint string) bool {
 	}
 	return true
 }
-

@@ -154,12 +154,12 @@ var _ = Describe("NfsV3Mounter", func() {
 			BeforeEach(func() {
 				fakeInvoker.InvokeReturns(nil, nil)
 
-				opts["default_permissions"] 	= true
-				opts["multithread"] 		= "false"
-				opts["fusenfs_uid"] 		= "1004"
-				opts["fusenfs_gid"] 		= 1004
-				opts["sloppy_mount"] 		= "true"
-				opts["no_exists_opts"] 		= "example"
+				opts["default_permissions"] = true
+				opts["multithread"] = "false"
+				opts["fusenfs_uid"] = "1004"
+				opts["fusenfs_gid"] = 1004
+				opts["sloppy_mount"] = "true"
+				opts["no_exists_opts"] = "example"
 
 				err = subject.Mount(env, "source", "target", opts)
 			})
@@ -184,11 +184,11 @@ var _ = Describe("NfsV3Mounter", func() {
 			BeforeEach(func() {
 				fakeInvoker.InvokeReturns(nil, nil)
 
-				opts["default_permissions"] 	= true
-				opts["multithread"] 		= "false"
-				opts["fusenfs_uid"] 		= 1004
-				opts["fusenfs_gid"] 		= "1004"
-				opts["no_exists_opts"] 		= "example"
+				opts["default_permissions"] = true
+				opts["multithread"] = "false"
+				opts["fusenfs_uid"] = 1004
+				opts["fusenfs_gid"] = "1004"
+				opts["no_exists_opts"] = "example"
 
 				err = subject.Mount(env, "source", "target", opts)
 			})
@@ -220,17 +220,17 @@ var _ = Describe("NfsV3Mounter", func() {
 func testMountOptions(args []string, expected []string) {
 	Expect(len(args)).To(Equal(len(expected)))
 
-	for _,p := range args {
+	for _, p := range args {
 		Expect(inArray(p, expected)).To(BeTrue())
 	}
 
-	for _,p := range expected {
+	for _, p := range expected {
 		Expect(inArray(p, args)).To(BeTrue())
 	}
 }
 
-func inArray (search string, slice []string) bool {
-	for _,v := range slice {
+func inArray(search string, slice []string) bool {
+	for _, v := range slice {
 		if v == search {
 			return true
 		}
